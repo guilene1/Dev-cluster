@@ -1,0 +1,37 @@
+# Terraform
+terraform/.terraform/
+# Covers timestamped rollback copies too (terraform.tfstate.<epoch>.backup),
+# which terraform state rm/mv leaves behind -- these contain the full state,
+# RDS master password included.
+terraform/*.tfstate*
+terraform/*.tfplan
+terraform/nul
+terraform/terraform.tfvars
+*.tfstate*
+
+# Node
+node_modules/
+dist/
+
+# Env / secrets
+.env
+.env.local
+
+# Per-deployment ALB hostname written by scripts/setup.sh
+.lab-domain
+
+# OS
+.DS_Store
+Thumbs.db
+.claude
+# Chaos script backups (original ConfigMap/Secret/manifest values)
+.chaos-backup/
+
+# Cached Datadog RUM application ids/client tokens written by scripts/setup.sh
+.rum-apps.json
+
+# Per-participant kubeconfigs written by scripts/users.sh. Each one embeds that
+# person's cluster token -- a credential, never commit or share them publicly.
+kubeconfigs/
+*.kubeconfig
+/Microsoft/
