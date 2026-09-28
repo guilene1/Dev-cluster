@@ -10,7 +10,8 @@ AWS Load Balancer Controller watches one `Ingress` resource per app and
 provisions a single shared Application Load Balancer (ALB) that routes
 traffic to all five apps by hostname.
 
-<img width="512" height="341" alt="image" src="https://github.com/user-attachments/assets/ffc1ab59-e5de-4046-ac25-a89e3438c0c0" />
+<img width="1536" height="1024" alt="image" src="https://github.com/user-attachments/assets/a8b3a9b1-92ce-4961-b67c-67bc188b6562" />
+
 
 
 ## Compute: Amazon EKS
