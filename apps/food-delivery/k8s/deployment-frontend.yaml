@@ -14,11 +14,6 @@ spec:
     metadata:
       labels:
         app: food-delivery-frontend
-        tags.datadoghq.com/env: "lab"
-        tags.datadoghq.com/service: "food-delivery-frontend"
-        tags.datadoghq.com/version: "1.0.0"
-      annotations:
-        ad.datadoghq.com/food-delivery-frontend.logs: '[{"source":"nginx","service":"food-delivery-frontend"}]'
     spec:
       containers:
         - name: food-delivery-frontend

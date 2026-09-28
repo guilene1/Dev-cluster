@@ -10,7 +10,7 @@ metadata:
   name: ${USER_NAME}
   namespace: lab-users
   labels:
-    sre-lab/user: ${USER_NAME}
+    lab/user: ${USER_NAME}
 ---
 # A long-lived, revocable token: deleting this Secret (or the ServiceAccount)
 # invalidates it immediately. Chosen over `kubectl create token` because the
@@ -22,7 +22,7 @@ metadata:
   name: ${USER_NAME}-token
   namespace: lab-users
   labels:
-    sre-lab/user: ${USER_NAME}
+    lab/user: ${USER_NAME}
   annotations:
     kubernetes.io/service-account.name: ${USER_NAME}
 type: kubernetes.io/service-account-token
@@ -32,8 +32,8 @@ kind: Namespace
 metadata:
   name: sandbox-${USER_NAME}
   labels:
-    app.kubernetes.io/part-of: sre-lab
-    sre-lab/user: ${USER_NAME}
+    app.kubernetes.io/part-of: k8s-lab
+    lab/user: ${USER_NAME}
     # `baseline` rejects privileged pods, hostPath/hostNetwork/hostPort and
     # added capabilities -- what a hostile or careless pod would need to reach
     # the node it runs on (and through it, the node's IAM role).
@@ -48,7 +48,7 @@ metadata:
   name: sandbox-quota
   namespace: sandbox-${USER_NAME}
   labels:
-    sre-lab/user: ${USER_NAME}
+    lab/user: ${USER_NAME}
 spec:
   hard:
     requests.cpu: 250m
@@ -103,4 +103,4 @@ subjects:
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: sre-lab-sandbox-user
+  name: lab-sandbox-user

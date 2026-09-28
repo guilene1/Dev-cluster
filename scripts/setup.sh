@@ -1,19 +1,12 @@
 #!/usr/bin/env bash
-# End-to-end setup: terraform apply -> configure kubectl -> provision Datadog
-# RUM apps -> build/push images -> create per-app databases on the shared RDS
-# instance -> create k8s secrets -> deploy every app -> install the AWS Load
-# Balancer Controller and Ingresses -> optionally install Datadog -> print
-# next steps.
+# End-to-end setup: terraform apply -> configure kubectl -> build/push images
+# -> create per-app databases on the shared RDS instance -> create k8s secrets
+# -> deploy every app -> install the AWS Load Balancer Controller and
+# Ingresses -> print next steps.
 #
 # Requires: terraform, aws cli (configured), kubectl, docker, helm, jq.
 # RDS has no public access, so per-app databases are created via a short-lived
 # pod running inside the cluster (the only thing allowed to reach RDS:5432).
-#
-# Optional: set DATADOG_API_KEY (and DATADOG_APP_KEY, DATADOG_SITE) to also
-# install the Datadog Agent, provision a RUM application per app (so browser
-# sessions trace end-to-end into each backend's APM traces -- see step 3/10
-# and apps/<app>/frontend/src/rum.js), and import dashboards/monitors -- see
-# step 10/10.
 
 set -euo pipefail
 
@@ -175,7 +168,7 @@ else
 fi
 export TF_VAR_acm_certificate_arn
 
-echo "==> 1/10 terraform apply"
+echo "==> 1/8 terraform apply"
 cd "$TF_DIR"
 terraform init -input=false
 
@@ -185,7 +178,7 @@ terraform init -input=false
 # harmful: a plain apply here deletes all five records, and step 9 doesn't
 # recreate them until ~10 minutes later, so every app URL returns NXDOMAIN
 # for the whole build-and-deploy phase. That matters because re-running this
-# script is the documented way to add Datadog to an existing lab.
+# script is the documented way to update an existing lab.
 #
 # So: if the shared ALB is already out there, keep the records. The lookup is
 # read-only and falls back to the old behaviour if it fails for any reason
@@ -223,83 +216,10 @@ ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 ECR_REGISTRY="${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com"
 echo "$LAB_DOMAIN" > "$REPO_ROOT/.lab-domain"
 
-echo "==> 2/10 configure kubectl"
+echo "==> 2/8 configure kubectl"
 aws eks update-kubeconfig --name "$CLUSTER_NAME" --region "$REGION"
 
-echo "==> 3/10 provision Datadog RUM applications (optional)"
-# Populated (per app) only when both keys are set below. Read with
-# ${RUM_APP_IDS[$app]:-} elsewhere, since under set -u a missing key in a
-# *declared* (even empty) associative array is fine, but the frontend build
-# loop needs that guard either way.
-declare -A RUM_APP_IDS
-declare -A RUM_CLIENT_TOKENS
-# Provisioned RUM ids/tokens are cached here (gitignored) so a later run
-# WITHOUT an application key can still bake RUM into the frontend bundles.
-# Without this cache, re-running setup.sh with only DATADOG_API_KEY set --
-# which is exactly what the README recommends, to avoid duplicating
-# dashboards -- rebuilds all 5 frontends with RUM stripped out, and browser
-# spans silently disappear from every trace.
-RUM_CACHE="$REPO_ROOT/.rum-apps.json"
-if [ -n "${DATADOG_API_KEY:-}" ] && [ -n "${DATADOG_APP_KEY:-}" ]; then
-  DATADOG_SITE="${DATADOG_SITE:-datadoghq.com}"
-  for app in "${APPS[@]}"; do
-    rum_name="sre-lab-${app}"
-    # List + reuse-by-name rather than always creating: the RUM Applications
-    # API has no upsert, and unlike the dashboard/monitor import below (which
-    # already duplicates on every re-run -- see README Troubleshooting),
-    # duplicate RUM apps would silently orphan the previous run's
-    # clientToken, breaking any browser tab that still has it cached.
-    existing_id=$(curl -sf "https://api.${DATADOG_SITE}/api/v2/rum/applications" \
-      -H "DD-API-KEY: ${DATADOG_API_KEY}" \
-      -H "DD-APPLICATION-KEY: ${DATADOG_APP_KEY}" \
-      | jq -r --arg name "$rum_name" '.data[] | select(.attributes.name == $name) | .id' | head -n1)
-    if [ -n "$existing_id" ]; then
-      echo "    reusing existing RUM application for ${app}"
-      # client_token isn't included in the list response, only single-GET.
-      client_token=$(curl -sf "https://api.${DATADOG_SITE}/api/v2/rum/applications/${existing_id}" \
-        -H "DD-API-KEY: ${DATADOG_API_KEY}" \
-        -H "DD-APPLICATION-KEY: ${DATADOG_APP_KEY}" \
-        | jq -r '.data.attributes.client_token')
-      RUM_APP_IDS[$app]="$existing_id"
-      RUM_CLIENT_TOKENS[$app]="$client_token"
-    else
-      echo "    creating RUM application for ${app}"
-      response=$(curl -sf -X POST "https://api.${DATADOG_SITE}/api/v2/rum/applications" \
-        -H "Content-Type: application/json" \
-        -H "DD-API-KEY: ${DATADOG_API_KEY}" \
-        -H "DD-APPLICATION-KEY: ${DATADOG_APP_KEY}" \
-        -d "{\"data\":{\"type\":\"rum_application_create\",\"attributes\":{\"name\":\"${rum_name}\",\"type\":\"browser\"}}}")
-      RUM_APP_IDS[$app]=$(echo "$response" | jq -r '.data.id')
-      RUM_CLIENT_TOKENS[$app]=$(echo "$response" | jq -r '.data.attributes.client_token')
-    fi
-  done
-
-  # Cache for app-key-less re-runs (see RUM_CACHE comment above).
-  : > "${RUM_CACHE}.tmp"
-  for app in "${APPS[@]}"; do
-    jq -n --arg a "$app" --arg id "${RUM_APP_IDS[$app]}" --arg t "${RUM_CLIENT_TOKENS[$app]}" \
-      '{($a): {id: $id, token: $t}}' >> "${RUM_CACHE}.tmp"
-  done
-  jq -s add "${RUM_CACHE}.tmp" > "$RUM_CACHE" && rm -f "${RUM_CACHE}.tmp"
-
-elif [ -n "${DATADOG_API_KEY:-}" ] && [ -f "$RUM_CACHE" ]; then
-  echo "    no DATADOG_APP_KEY this run -- reusing cached RUM config from .rum-apps.json"
-  echo "    (delete that file if you want frontends rebuilt without RUM)"
-  for app in "${APPS[@]}"; do
-    cached_id=$(jq -r --arg a "$app" '.[$a].id // empty' "$RUM_CACHE")
-    cached_token=$(jq -r --arg a "$app" '.[$a].token // empty' "$RUM_CACHE")
-    if [ -n "$cached_id" ] && [ -n "$cached_token" ]; then
-      RUM_APP_IDS[$app]="$cached_id"
-      RUM_CLIENT_TOKENS[$app]="$cached_token"
-    fi
-  done
-else
-  echo "    DATADOG_API_KEY/DATADOG_APP_KEY not set -- skipping. Frontends build and run fine"
-  echo "    without RUM; re-run with both set (plus the same DATADOG_SITE if that's non-default)"
-  echo "    to add it later -- this step, like Datadog install below, is safe to re-run."
-fi
-
-echo "==> 4/10 build and push images to ECR"
+echo "==> 3/8 build and push images to ECR"
 aws ecr get-login-password --region "$REGION" | docker login --username AWS --password-stdin "$ECR_REGISTRY"
 
 IMAGE_TAG="$(date +%Y%m%d%H%M%S)"
@@ -307,29 +227,18 @@ for app in "${APPS[@]}"; do
   for part in backend frontend; do
     image="dev-cluster/${app}-${part}"
     echo "    building ${image}:${IMAGE_TAG}"
-    BUILD_ARGS=()
-    if [ "$part" = "frontend" ] && [ -n "${RUM_APP_IDS[$app]:-}" ]; then
-      BUILD_ARGS=(
-        --build-arg "VITE_DD_APPLICATION_ID=${RUM_APP_IDS[$app]}"
-        --build-arg "VITE_DD_CLIENT_TOKEN=${RUM_CLIENT_TOKENS[$app]}"
-        --build-arg "VITE_DD_SITE=${DATADOG_SITE:-datadoghq.com}"
-        --build-arg "VITE_DD_SERVICE=${app}-frontend"
-        --build-arg "VITE_DD_ENV=lab"
-        --build-arg "VITE_DD_VERSION=1.0.0"
-      )
-    fi
-    docker build --platform linux/amd64 "${BUILD_ARGS[@]}" -t "${ECR_REGISTRY}/${image}:${IMAGE_TAG}" "$REPO_ROOT/apps/${app}/${part}"
+    docker build --platform linux/amd64 -t "${ECR_REGISTRY}/${image}:${IMAGE_TAG}" "$REPO_ROOT/apps/${app}/${part}"
     docker push "${ECR_REGISTRY}/${image}:${IMAGE_TAG}"
   done
 done
 
-echo "==> 5/10 create namespaces and shared-user RBAC"
+echo "==> 4/8 create namespaces and shared-user RBAC"
 kubectl apply -f "$REPO_ROOT/namespaces/"
 # Read-only-everywhere + personal-sandbox access model for people sharing this
 # cluster. Creates no users by itself -- see scripts/users.sh.
 kubectl apply -f "$REPO_ROOT/rbac/cluster-access.yaml"
 
-echo "==> 6/10 create per-app databases on shared RDS instance"
+echo "==> 5/8 create per-app databases on shared RDS instance"
 for app in "${APPS[@]}"; do
   db_name="${app//-/_}_db"
   db_user="${app//-/_}_app"
@@ -362,10 +271,10 @@ for app in "${APPS[@]}"; do
     --dry-run=client -o yaml | kubectl apply -f -
 done
 
-echo "==> 7/10 deploy food-delivery redis"
+echo "==> 6/8 deploy food-delivery redis"
 kubectl apply -f "$REPO_ROOT/apps/food-delivery/redis/deployment.yaml"
 
-echo "==> 8/10 deploy all apps"
+echo "==> 7/8 deploy all apps"
 for app in "${APPS[@]}"; do
   k8s_dir="$REPO_ROOT/apps/${app}/k8s"
   for manifest in "$k8s_dir"/*.yaml; do
@@ -405,7 +314,7 @@ if [ ${#rollout_failures[@]} -gt 0 ]; then
   exit 1
 fi
 
-echo "==> 9/10 install metrics-server + the AWS Load Balancer Controller, apply Ingress, and create DNS records"
+echo "==> 8/8 install metrics-server + the AWS Load Balancer Controller, apply Ingress, and create DNS records"
 
 # metrics-server serves the metrics.k8s.io API. Without it `kubectl top` fails
 # and -- more importantly for this lab -- every HorizontalPodAutoscaler sits at
@@ -452,98 +361,6 @@ cd "$TF_DIR"
 terraform apply -auto-approve -var="create_dns_records=true"
 cd "$REPO_ROOT"
 
-echo "==> 10/10 install the Datadog Agent (optional)"
-if [ -z "${DATADOG_API_KEY:-}" ]; then
-  echo "    DATADOG_API_KEY not set -- skipping. Everything above is safe to"
-  echo "    re-run, so install it later with:"
-  echo "      DATADOG_API_KEY=<key> [DATADOG_APP_KEY=<key>] [DATADOG_SITE=<site>] ./scripts/setup.sh"
-  DATADOG_INSTALLED=false
-else
-  DATADOG_SITE="${DATADOG_SITE:-datadoghq.com}"
-
-  # Existence check rather than `kubectl apply`: step 5/10 already created this
-  # namespace (with a label) via namespaces/datadog.yaml, and applying a bare
-  # Namespace object on top would silently strip that label via the normal
-  # 3-way merge (fields owned by the previous apply but absent from this one
-  # get removed). Only create it if it's genuinely missing.
-  kubectl get namespace datadog >/dev/null 2>&1 || kubectl create namespace datadog
-
-  SECRET_ARGS=(--from-literal "api-key=${DATADOG_API_KEY}")
-  if [ -n "${DATADOG_APP_KEY:-}" ]; then
-    SECRET_ARGS+=(--from-literal "app-key=${DATADOG_APP_KEY}")
-  fi
-  kubectl create secret generic datadog-secret --namespace datadog "${SECRET_ARGS[@]}" \
-    --dry-run=client -o yaml | kubectl apply -f -
-
-  helm repo add datadog https://helm.datadoghq.com >/dev/null 2>&1 || true
-  helm repo update >/dev/null
-
-  HELM_ARGS=(--set "datadog.site=${DATADOG_SITE}")
-  if [ -n "${DATADOG_APP_KEY:-}" ]; then
-    HELM_ARGS+=(--set "datadog.appKeyExistingSecret=datadog-secret")
-  fi
-  helm upgrade --install datadog datadog/datadog \
-    --namespace datadog \
-    -f "$REPO_ROOT/datadog/helm-values.yaml" \
-    "${HELM_ARGS[@]}"
-
-  # A Secret-only change (e.g. switching accounts on a re-run) isn't picked up
-  # by already-running pods and isn't detected as a Helm diff either --
-  # restart explicitly so the agent always ends up on the key/site just set.
-  if kubectl get daemonset datadog -n datadog >/dev/null 2>&1; then
-    kubectl rollout restart daemonset/datadog -n datadog >/dev/null
-    kubectl rollout restart deployment/datadog-cluster-agent -n datadog >/dev/null
-  fi
-
-  echo "    waiting for the agent to come up..."
-  for i in $(seq 1 30); do
-    kubectl get daemonset datadog -n datadog >/dev/null 2>&1 && break
-    sleep 5
-  done
-  kubectl rollout status daemonset/datadog -n datadog --timeout=180s
-  kubectl rollout status deployment/datadog-cluster-agent -n datadog --timeout=180s
-  DATADOG_INSTALLED=true
-
-  DATADOG_DASHBOARDS_IMPORTED=false
-  if [ -n "${DATADOG_APP_KEY:-}" ]; then
-    echo "    importing dashboards and monitors"
-    for f in "$REPO_ROOT"/datadog/dashboards/*.json; do
-      curl -sf -X POST "https://api.${DATADOG_SITE}/api/v1/dashboard" \
-        -H "Content-Type: application/json" \
-        -H "DD-API-KEY: ${DATADOG_API_KEY}" \
-        -H "DD-APPLICATION-KEY: ${DATADOG_APP_KEY}" \
-        -d @"$f" > /dev/null
-    done
-    # Unlike dashboards (which the Datadog API happily duplicates on every
-    # re-run), monitors reject an exact duplicate outright with a 400 --
-    # which, under set -e, would abort the whole script right at the last
-    # step. Update-by-name instead: every monitor here carries
-    # team:sre-lab, so list by that tag and PUT to the existing id if a
-    # name match is found, POST only for genuinely new monitors.
-    for f in "$REPO_ROOT"/datadog/monitors/*.json; do
-      monitor_name=$(jq -r '.name' "$f")
-      existing_monitor_id=$(curl -sf "https://api.${DATADOG_SITE}/api/v1/monitor?monitor_tags=team%3Asre-lab" \
-        -H "DD-API-KEY: ${DATADOG_API_KEY}" \
-        -H "DD-APPLICATION-KEY: ${DATADOG_APP_KEY}" \
-        | jq -r --arg name "$monitor_name" '.[] | select(.name == $name) | .id' | head -n1)
-      if [ -n "$existing_monitor_id" ]; then
-        curl -sf -X PUT "https://api.${DATADOG_SITE}/api/v1/monitor/${existing_monitor_id}" \
-          -H "Content-Type: application/json" \
-          -H "DD-API-KEY: ${DATADOG_API_KEY}" \
-          -H "DD-APPLICATION-KEY: ${DATADOG_APP_KEY}" \
-          -d @"$f" > /dev/null
-      else
-        curl -sf -X POST "https://api.${DATADOG_SITE}/api/v1/monitor" \
-          -H "Content-Type: application/json" \
-          -H "DD-API-KEY: ${DATADOG_API_KEY}" \
-          -H "DD-APPLICATION-KEY: ${DATADOG_APP_KEY}" \
-          -d @"$f" > /dev/null
-      fi
-    done
-    DATADOG_DASHBOARDS_IMPORTED=true
-  fi
-fi
-
 echo ""
 echo "================================================================"
 echo " Setup complete."
@@ -557,18 +374,3 @@ echo "  https://food-delivery.${LAB_DOMAIN}"
 echo "  https://student-portal.${LAB_DOMAIN}"
 echo "  https://support-tickets.${LAB_DOMAIN}"
 echo ""
-if [ "$DATADOG_INSTALLED" = "true" ]; then
-  if [ "$DATADOG_DASHBOARDS_IMPORTED" = "true" ]; then
-    echo "Datadog Agent installed and reporting, dashboards and monitors imported."
-  else
-    echo "Datadog Agent installed and reporting. Set DATADOG_APP_KEY and re-run to"
-    echo "also import the dashboards and monitors."
-  fi
-else
-  echo "Next: install the Datadog Agent with your own API key:"
-  echo "  DATADOG_API_KEY=<key> [DATADOG_APP_KEY=<key>] [DATADOG_SITE=<site>] ./scripts/setup.sh"
-fi
-if [ -n "${DATADOG_API_KEY:-}" ] && [ -n "${DATADOG_APP_KEY:-}" ]; then
-  echo "Frontends were built with Datadog RUM enabled -- browser sessions trace"
-  echo "end-to-end into each backend's APM traces in APM > Traces."
-fi

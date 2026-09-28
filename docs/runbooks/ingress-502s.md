@@ -31,8 +31,7 @@ aws elbv2 describe-target-groups --region us-east-1 \
 aws elbv2 describe-target-health --region us-east-1 --target-group-arn <arn>
 ```
 
-  There are no ALB metrics in Datadog in this lab (the AWS integration isn't
-  configured), so target health is only visible from the CLI or the console.
+  Target health is only visible from the AWS CLI or the console.
 
 ## Diagnostic commands
 

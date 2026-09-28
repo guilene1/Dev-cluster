@@ -27,8 +27,6 @@ Thumbs.db
 # Chaos script backups (original ConfigMap/Secret/manifest values)
 .chaos-backup/
 
-# Cached Datadog RUM application ids/client tokens written by scripts/setup.sh
-.rum-apps.json
 
 # Per-participant kubeconfigs written by scripts/users.sh. Each one embeds that
 # person's cluster token -- a credential, never commit or share them publicly.

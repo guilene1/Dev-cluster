@@ -11,8 +11,8 @@ metadata:
   name: ${USER_NAME}
   namespace: lab-users
   labels:
-    sre-lab/user: ${USER_NAME}
-    sre-lab/mode: readonly
+    lab/user: ${USER_NAME}
+    lab/mode: readonly
 ---
 # Revocable long-lived token: `users.sh remove` deletes this and it stops
 # working immediately for everyone holding the file.
@@ -22,8 +22,8 @@ metadata:
   name: ${USER_NAME}-token
   namespace: lab-users
   labels:
-    sre-lab/user: ${USER_NAME}
-    sre-lab/mode: readonly
+    lab/user: ${USER_NAME}
+    lab/mode: readonly
   annotations:
     kubernetes.io/service-account.name: ${USER_NAME}
 type: kubernetes.io/service-account-token

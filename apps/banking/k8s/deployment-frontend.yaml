@@ -14,11 +14,6 @@ spec:
     metadata:
       labels:
         app: banking-frontend
-        tags.datadoghq.com/env: "lab"
-        tags.datadoghq.com/service: "banking-frontend"
-        tags.datadoghq.com/version: "1.0.0"
-      annotations:
-        ad.datadoghq.com/banking-frontend.logs: '[{"source":"nginx","service":"banking-frontend"}]'
     spec:
       containers:
         - name: banking-frontend

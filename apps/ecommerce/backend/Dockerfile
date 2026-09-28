@@ -12,4 +12,4 @@ COPY src ./src
 USER app
 EXPOSE 4000
 ENV PORT=4000
-CMD ["node", "-r", "./src/tracer.js", "src/index.js"]
+CMD ["node", "src/index.js"]

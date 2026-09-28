@@ -3,7 +3,7 @@ kind: Namespace
 metadata:
   name: banking
   labels:
-    app.kubernetes.io/part-of: sre-lab
+    app.kubernetes.io/part-of: k8s-lab
     env: lab
 ---
 apiVersion: v1
@@ -50,8 +50,8 @@ spec:
         memory: 1Gi
       min:
         cpu: 50m
-        # 16Mi, not 64Mi: this floor also bounds how low a deliberately-bad
-        # limit can be set, and a backend needs ~31Mi resident -- at a 64Mi
+        # 8Mi, not 64Mi: this floor also bounds how low a deliberately-bad
+        # limit can be set, and a backend needs ~16Mi resident -- at a higher
         # floor, scripts/chaos/shrink-limits.sh could never actually starve
         # one, so the OOMKilled scenario would not reproduce reliably.
-        memory: 16Mi
+        memory: 8Mi

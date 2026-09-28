@@ -2,15 +2,13 @@
 
 ## Overview
 
-The SRE lab runs five independent full-stack applications on a single shared
+The lab runs five independent full-stack applications on a single shared
 Amazon EKS cluster, backed by a single shared Amazon RDS for PostgreSQL
 instance. Each app is a self-contained namespace with its own frontend,
 backend, database, and (for food-delivery) an in-cluster Redis cache. The
 AWS Load Balancer Controller watches one `Ingress` resource per app and
 provisions a single shared Application Load Balancer (ALB) that routes
-traffic to all five apps by hostname. Datadog's Agent and Cluster Agent run
-cluster-wide and collect infrastructure metrics, container logs, and APM
-traces from every app.
+traffic to all five apps by hostname.
 
 <img width="512" height="341" alt="image" src="https://github.com/user-attachments/assets/ffc1ab59-e5de-4046-ac25-a89e3438c0c0" />
 
@@ -36,11 +34,11 @@ token, created by `scripts/users.sh` from `rbac/`.
 - **Read everywhere:** every user ServiceAccount is in the group
   `system:serviceaccounts:lab-users`, which is bound once, cluster-wide, to
   the built-in `view` ClusterRole plus a small node/namespace reader. `view`
-  excludes Secrets, which is the property that keeps the Datadog keys and
-  the per-app RDS credentials out of reach. Nothing in the app manifests or
+  excludes Secrets, which is the property that keeps the per-app
+  RDS credentials out of reach. Nothing in the app manifests or
   ConfigMaps holds a literal secret, so `view` reveals none.
 - **Write only in a sandbox:** each user also gets `sandbox-<name>`, with a
-  `RoleBinding` to `sre-lab-sandbox-user`, a `ResourceQuota` and `LimitRange`,
+  `RoleBinding` to `lab-sandbox-user`, a `ResourceQuota` and `LimitRange`,
   and the Pod Security `baseline` profile. The role omits Ingresses,
   because the AWS Load Balancer Controller acts on any Ingress in any
   namespace and one carrying the `dev-cluster` group name could re-route the shared ALB. The quota caps
@@ -48,7 +46,7 @@ token, created by `scripts/users.sh` from `rbac/`.
   reason: they create billable or externally reachable AWS resources.
 - **Not addressed:** there is no NetworkPolicy (the VPC CNI's policy
   enforcement isn't enabled by this repo), and the EKS API endpoint is public.
-  The model assumes trusted participants. See the README's "Known limits".
+  The model assumes trusted participants. See "Optional: share your cluster with teammates" in the README.
 
 The existing `dev-cluster-eks-admin-role` in `terraform/eks.tf` is unchanged and
 remains the administrator path.
@@ -162,55 +160,6 @@ backend exposes:
   simulated DB-connection drop, a CPU-blocking spike, and a memory-retaining
   spike), documented in `scripts/chaos/` and used throughout
   `docs/runbooks/` and `docs/incident-scenarios/`.
-
-Unified service tagging (`env`, `service`, `version`) is applied as both
-pod labels (`tags.datadoghq.com/*`) and container env vars (`DD_ENV`,
-`DD_SERVICE`, `DD_VERSION`) on every Deployment, so a trace, a log line, and
-a container metric for the same pod all correlate in Datadog automatically.
-
-## Observability: Datadog
-
-Each student runs their own free-trial Datadog account -- nothing in this
-repo contains a real API key. Passing `DATADOG_API_KEY` (and optionally
-`DATADOG_APP_KEY`, `DATADOG_SITE`) to `scripts/setup.sh` installs the
-Datadog Agent and Cluster Agent via Helm (`datadog/helm-values.yaml`) with
-APM and log collection enabled, and -- if an app key was provided --
-imports every dashboard/monitor via the Datadog API (see step 10/10 in
-`scripts/setup.sh`). Every backend requires `dd-trace` as the very first
-line executed (`src/tracer.js`, loaded via `-r`).
-
-That covers the backend. The frontend is a static SPA served by nginx --
-there's no server process for `dd-trace` to patch, so browser-side
-visibility is a separate Datadog product (RUM), wired up separately:
-if both `DATADOG_API_KEY` and `DATADOG_APP_KEY` are set, step 3/10 of
-`scripts/setup.sh` provisions a Datadog RUM application per app via the
-RUM Applications API (`POST /api/v2/rum/applications`, reusing an existing
-one by name on re-runs rather than duplicating), and step 4/10 bakes the
-resulting `applicationId`/`clientToken` into that app's frontend build as
-`VITE_`-prefixed Docker build args (Vite only exposes env vars present at
-*build* time -- a static bundle has no runtime env injection the way a
-Deployment's env vars work). `apps/<app>/frontend/src/rum.js`, imported
-first in `main.jsx` (same "load before anything else" pattern as
-`tracer.js` on the backend), initializes `@datadog/browser-rum` with those
-values and `allowedTracingUrls: [window.location.origin]`.
-
-That last part is what makes a single HTTP request genuinely traceable
-frontend -> backend -> Postgres in APM, not just conceptually adjacent:
-each frontend's nginx proxies `/api/*` to its own backend Service
-internally (see `nginx.conf`), so from the browser's perspective every API
-call is same-origin -- `window.location.origin` alone is sufficient for
-RUM to inject trace-propagation headers into it, no CORS configuration or
-cross-origin allowlisting needed, and dd-trace on the receiving end (any
-reasonably current version; this lab pins `^5.0.0`) picks the trace up
-automatically. The result: a RUM session's span for, say, `GET
-/api/products` stitches directly into that same request's backend APM
-trace. Session Replay is deliberately left off
-(`sessionReplaySampleRate: 0`) to keep RUM scoped to tracing rather than
-screen recording.
-
-See `docs/student-guide.md` for the exact account setup and env vars, and
-`datadog/dashboards/` + `datadog/monitors/` for the dashboard and monitor
-definitions themselves.
 
 ## What's deliberately simplified for a training lab
 

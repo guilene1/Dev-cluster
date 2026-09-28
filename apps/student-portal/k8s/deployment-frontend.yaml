@@ -14,11 +14,6 @@ spec:
     metadata:
       labels:
         app: student-portal-frontend
-        tags.datadoghq.com/env: "lab"
-        tags.datadoghq.com/service: "student-portal-frontend"
-        tags.datadoghq.com/version: "1.0.0"
-      annotations:
-        ad.datadoghq.com/student-portal-frontend.logs: '[{"source":"nginx","service":"student-portal-frontend"}]'
     spec:
       containers:
         - name: student-portal-frontend

@@ -93,10 +93,7 @@ Give the AWS Load Balancer Controller a minute or two to reconcile, then:
   kubectl -n ${NS} describe ingress ${ING}
   kubectl -n kube-system logs deployment/aws-load-balancer-controller --tail=50 | grep ${APP}
 
-Datadog APM shows the backend unexpectedly receiving GET / and returning 404.
-Open Trace Explorer and filter service:${APP}-backend resource_name:"GET /";
-confirm http.status_code:404 on the spans. The Scenario Signals dashboard and
-Unexpected backend root traffic monitor use the same real trace metric. ALB
+The backend is now unexpectedly receiving GET / and returning 404. ALB
 target health still lives in AWS:
   aws elbv2 describe-target-health --region us-east-1 --target-group-arn <arn>
 See docs/runbooks/ingress-502s.md.

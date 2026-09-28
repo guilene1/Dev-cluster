@@ -2,32 +2,33 @@
 # DevOps failure mode: a resource limit tuned down to fit a quota, with no idea
 # what the process actually needs at runtime.
 #
-# Patches the backend Deployment's memory request and limit down to 20Mi. A
-# backend needs roughly 31Mi resident once Express, pg and dd-trace are
-# loaded, so 20Mi is below what it takes just to start: new pods are
-# OOMKilled during startup (exit 137) and land in CrashLoopBackOff, while the
-# old pods keep serving. Nothing leaked; the resource ceiling moved.
+# Patches the backend Deployment's memory request and limit down to 12Mi. A
+# backend needs roughly 16Mi resident once Express and pg are loaded, and a
+# little more while starting, so 12Mi is below what it takes just to start:
+# new pods are OOMKilled during startup (exit 137) and land in
+# CrashLoopBackOff, while the old pods keep serving. Nothing leaked; the
+# resource ceiling moved.
 #
-# The value matters more than it looks. Measured on this lab: 64Mi and 32Mi
-# both leave the process running (32Mi only kills it occasionally, since
-# usage sits right at the line), so anything less decisive than 20Mi gives
-# students a scenario that quietly doesn't reproduce.
+# The value matters more than it looks. Measured on this lab: 18Mi leaves the
+# process running and 16Mi only kills it most of the time (usage sits right
+# at the line), so anything less decisive than 12Mi gives students a
+# scenario that quietly doesn't reproduce.
 #
-# 20Mi is still above the namespace LimitRange's 16Mi floor, so the API
+# 12Mi is still above the namespace LimitRange's 8Mi floor, so the API
 # server accepts it without complaint. That is the point of the scenario:
 # admission control enforces bounds, not whether a number makes sense for a
 # given workload.
 #
-# Usage: shrink-limits.sh <app> [mi] [--undo]   (default 20Mi)
+# Usage: shrink-limits.sh <app> [mi] [--undo]   (default 12Mi)
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 BACKUP_DIR="${REPO_ROOT}/.chaos-backup"
 
 APP="${1:?usage: shrink-limits.sh <app> [mi] [--undo]}"
-ARG2="${2:-20}"
+ARG2="${2:-12}"
 if [[ "$ARG2" == "--undo" ]]; then
-  MODE="--undo"; MI=20
+  MODE="--undo"; MI=12
 else
   MI="$ARG2"; MODE="${3:-break}"
 fi
@@ -87,7 +88,7 @@ first real request through it finishes the job.
   kubectl -n ${NS} describe pod \$(kubectl -n ${NS} get pods -l app=${DEPLOY} --sort-by=.metadata.creationTimestamp -o name | tail -1) | grep -A5 "Last State"
   kubectl -n ${NS} get events --sort-by=.lastTimestamp | tail -20
 
-Expect Reason: OOMKilled, and the [SRE Lab] Pod restarts monitor to fire.
+Expect Reason: OOMKilled and a climbing RESTARTS count.
 See docs/runbooks/oomkill.md.
 
 Undo:

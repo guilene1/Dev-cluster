@@ -1,8 +1,8 @@
-# Scenario 5: High Application Latency Using Datadog
+# Scenario 5: High Application Latency
 
 ## Objective
 
-Use Datadog APM to identify a slow workload before investigating Kubernetes and applying a focused recovery.
+Measure latency from outside the cluster, isolate the slow workload, then investigate Kubernetes and apply a focused recovery.
 
 ## Trigger the Incident
 
@@ -12,7 +12,7 @@ Run this from the repository root against your own lab environment:
 ./scripts/chaos/inject-latency.sh ecommerce 3000
 ```
 
-The request reaches one backend pod because chaos state is stored per process. Generate application traffic and wait for APM ingestion before troubleshooting. Repeat through the documented port-forward method only when you want every backend pod affected.
+The request reaches one backend pod because chaos state is stored per process. Only requests served by that pod are slow, so the symptom is intermittent. To affect every backend pod, use the port-forward method under [Fix](#fix) to send the same request to each pod.
 
 ## Situation
 
@@ -25,17 +25,31 @@ Users report that ecommerce pages load slowly. Do not restart pods before scopin
 
 ## What You Know
 
-- Datadog reports elevated p95 latency.
 - The issue affects `ecommerce-backend` while pods remain Ready.
 - The start time does not match an AWS or database change.
 
-## Start With Datadog
+## Start With the Symptom
 
-1. Go to **Dashboards > Dashboard List**, open **ecommerce**, and set the time range to **Past 30 Minutes**. In **p95 Latency**, look for `p95:trace.express.request{env:lab,service:ecommerce-backend}` rising above the normal baseline.
-2. Go to **Dashboards > Dashboard List**, open **SRE Lab Scenario Signals**, and compare **Backend p95 Latency** with memory, restarts, and available replicas. The scenario should raise latency without requiring resource saturation or unhealthy pods.
-3. Go to **Monitors > Manage Monitors**, search `[SRE Lab] High p95 latency`, open it, and expand the `ecommerce-backend` group. Record the alert start time and value.
+1. Time repeated API requests from outside the cluster:
 
-The key scope is slow APM traces for one service while Kubernetes health and resource signals remain near baseline.
+```bash
+for i in {1..10}; do
+  curl -s -o /dev/null -w '%{http_code} %{time_total}s\n' \
+    "https://ecommerce.$(cat .lab-domain)/api/products"
+done
+```
+
+Expected output: every request returns `200`, but some take about three seconds while the rest are fast.
+
+2. Time the static frontend the same way:
+
+```bash
+curl -s -o /dev/null -w '%{http_code} %{time_total}s\n' "https://ecommerce.$(cat .lab-domain)/"
+```
+
+Expected output: consistently fast. DNS, the ALB, and the frontend are fine, so the delay is in the backend.
+
+Record the start time, the slow and fast response times, and how many requests were slow.
 
 ## Troubleshooting
 
@@ -55,49 +69,52 @@ kubectl top pods -n ecommerce
 
 Expected output: CPU and memory remain near their normal baseline. This makes resource saturation and OOM restarts unlikely.
 
-3. Inspect the backend logs during the slow-trace timestamps.
+3. Time each backend pod directly to find the slow one.
 
 ```bash
-kubectl logs deployment/ecommerce-backend -n ecommerce --since=15m
+kubectl get pods -n ecommerce -l app=ecommerce-backend
+kubectl port-forward -n ecommerce pod/<pod-name> 4000:4000
+# in a second terminal:
+curl -s -o /dev/null -w '%{time_total}s\n' http://localhost:4000/api/products
 ```
 
-Expected output: requests complete without crashes, but response timing corresponds to the slow traces. There should be no probe failure, OOM, or restart pattern.
+Expected output: one pod answers in about three seconds and the others answer quickly. The slowdown lives inside one process, not in the network path.
 
-4. Check the application's current chaos state.
+4. Check that pod's chaos state through the same port-forward.
 
 ```bash
-curl -s "https://ecommerce.$(cat .lab-domain)/api/chaos"
+curl -s http://localhost:4000/api/chaos
 ```
 
-Expected output: JSON containing `"latencyMs":3000`. This in-memory setting explains traces taking approximately three seconds while Kubernetes remains healthy.
+Expected output: JSON containing `"latencyMs":3000`. This in-memory setting explains requests taking about three seconds while Kubernetes remains healthy.
 
 ## Important Clues
 
-Determine why one or more backend containers add time before every response. Use trace duration and the chaos-state endpoint as evidence.
-
-```bash
-curl -s https://ecommerce.$(cat .lab-domain)/api/chaos
-```
+Determine why one or more backend containers add time before every response. Use per-pod response times and the chaos-state endpoint as evidence.
 
 ## Root Cause
 
-Record the workload behavior that accounts for the trace duration while Kubernetes resource metrics remain normal. Confirm it with the instructor.
+Record the workload behavior that accounts for the response time while Kubernetes resource metrics remain normal, before you apply the fix.
 
 ## Fix
 
-Clear the workload's injected latency. Chaos state is per process, so repeat until every backend pod is reset, or reset each pod through port-forwarding as documented in the README.
+Clear the injected latency. Chaos state is per process, so reset every backend pod. The simplest way is through a port-forward to each pod:
 
 ```bash
-./scripts/chaos/reset.sh ecommerce
+kubectl port-forward -n ecommerce pod/<pod-name> 4000:4000
+# in a second terminal:
+curl -s -X POST http://localhost:4000/api/chaos/reset
 ```
+
+`./scripts/chaos/reset.sh ecommerce` does the same through the public URL, but it only reaches whichever pod the load balancer picks, so repeat it and re-check each pod.
 
 ## Validation
 
-Generate normal requests. Confirm p95 latency and traces return to baseline, pods remain healthy, Kubernetes metrics remain normal, and the Datadog monitor recovers.
+Repeat the timing loop from [Start With the Symptom](#start-with-the-symptom). Confirm every request is fast again, every pod reports `"latencyMs":0`, and pods remain healthy.
 
 ## DevOps Lesson
 
-Use traces to isolate the slow workload before taking action. A restart may hide evidence without explaining the cause.
+Measure and isolate the slow workload before taking action. A restart may hide evidence without explaining the cause.
 
 ## STAR Method
 
@@ -111,7 +128,7 @@ Explain the need to identify the affected workload before acting.
 
 ### Action
 
-Describe the dashboard, trace, Kubernetes, log, and workload-state evidence.
+Describe the external timing, per-pod timing, Kubernetes, and workload-state evidence.
 
 ### Result
 
@@ -123,4 +140,4 @@ Use the matching example in [DevOps STAR Scenarios](../devops-star-scenarios.md#
 
 ## Brief STAR Example
 
-Users reported slow responses from one of our applications while its EKS pods remained healthy. My task was to isolate the source before restarting anything. Datadog APM showed requests taking approximately three seconds, while CPU, memory, readiness, and restarts stayed normal. I found and cleared a 3000 ms application delay setting, after which p95 latency returned to baseline and the monitor recovered.
+Users reported slow responses from one of our applications while its EKS pods remained healthy. My task was to isolate the source before restarting anything. Timing requests showed API calls taking about three seconds on one backend pod, while CPU, memory, readiness, and restarts stayed normal. I found and cleared a 3000 ms application delay setting on that pod, after which response times returned to baseline.

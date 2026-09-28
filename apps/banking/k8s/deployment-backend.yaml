@@ -14,11 +14,6 @@ spec:
     metadata:
       labels:
         app: banking-backend
-        tags.datadoghq.com/env: "lab"
-        tags.datadoghq.com/service: "banking-backend"
-        tags.datadoghq.com/version: "1.0.0"
-      annotations:
-        ad.datadoghq.com/banking-backend.logs: '[{"source":"nodejs","service":"banking-backend"}]'
     spec:
       containers:
         - name: banking-backend
@@ -30,11 +25,6 @@ spec:
                 name: banking-backend-config
             - secretRef:
                 name: banking-db-credentials
-          env:
-            - name: DD_AGENT_HOST
-              valueFrom:
-                fieldRef:
-                  fieldPath: status.hostIP
           resources:
             requests:
               cpu: 100m

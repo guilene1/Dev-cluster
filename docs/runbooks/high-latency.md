@@ -2,10 +2,9 @@
 
 ## Symptoms
 
-- `[SRE Lab] High p95 latency` monitor fires for a service (see
-  `datadog/monitors/high-latency-p95.json`).
-- Users report slow page loads or slow API responses; the app's dashboard
-  shows p95 latency climbing above 500ms-1s.
+- Users report slow page loads or slow API responses.
+- Timing requests with `curl -w '%{time_total}'` shows responses climbing
+  above 500ms-1s.
 
 ## Diagnostic commands
 
@@ -16,12 +15,14 @@ kubectl -n <namespace> top pods
 # Are readiness probes still passing, or is the pod struggling that badly?
 kubectl -n <namespace> get pods
 
-# In Datadog APM: open the service's trace list, sort by duration desc,
-# and look at the flame graph for the slowest resource (endpoint).
+# Is it the frontend, the backend, or one pod? Time each layer
+curl -s -o /dev/null -w '%{time_total}s\n' https://<app>.$(cat .lab-domain)/
+curl -s -o /dev/null -w '%{time_total}s\n' https://<app>.$(cat .lab-domain)/api/<endpoint>
+kubectl -n <namespace> port-forward pod/<pod> 4000:4000   # then curl localhost:4000
 ```
 
-Use the trace to decide whether time is spent in application code or
-workload behavior. In this scenario, look at what the request handler does
+Use the timings to decide whether time is spent in the network path, one
+pod, or application code for a specific endpoint. In this scenario, look at what the request handler does
 (for example, ecommerce's `checkout` endpoint calls a
 simulated payment processor with a 150-350ms delay by design
 -- see `apps/ecommerce/backend/src/routes.js`).
@@ -48,17 +49,15 @@ simulated payment processor with a 150-350ms delay by design
    If it's pinned at `maxReplicas` and still slow, you're out of horizontal
    headroom -- either raise `maxReplicas` or investigate why each pod isn't
    handling more throughput (often a downstream bottleneck, not a CPU one).
-3. If the slow span is a specific query, that's a code/index fix, not an
-   ops fix -- file it, don't just restart pods and hope.
+3. If one endpoint is slow because of a specific query, that's a code/index
+   fix, not an ops fix -- file it, don't just restart pods and hope.
 
 ## Prevention
 
-- Keep the four golden signals (`datadog/dashboards/<app>.json`) visible
-  by default, not just during incidents, so a latency creep is visible
-  before it crosses the SLO threshold.
-- Tie the monitor threshold to the actual SLO (see
-  `docs/slo-sla-sli.md`) so "high latency" means something specific, not a
-  guess.
+- Record baseline response times for each app's main endpoints, so a
+  latency creep is noticed before users report it.
+- Agree on a specific threshold for "too slow" per endpoint, so "high
+  latency" means something specific, not a guess.
 
 ## Reproduce this in the lab
 

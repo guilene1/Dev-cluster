@@ -160,7 +160,7 @@ cmd_add() {
       if expect yes "$f" list pods --all-namespaces \
         && expect yes "$f" list services --all-namespaces \
         && expect yes "$f" list nodes \
-        && expect no  "$f" get secrets -n datadog \
+        && expect no  "$f" get secrets -n banking \
         && expect no  "$f" create pods -n default \
         && expect no  "$f" create deployments -n ecommerce; then
         echo "    verified: can read everything except Secrets, cannot create or change anything"
@@ -172,7 +172,7 @@ cmd_add() {
       echo "    wrote ${OUT_DIR}/${name}.kubeconfig  (sandbox: sandbox-${name})"
       if expect yes "$f" create deployments -n "sandbox-${name}" \
         && expect yes "$f" list pods --all-namespaces \
-        && expect no  "$f" get secrets -n datadog \
+        && expect no  "$f" get secrets -n banking \
         && expect no  "$f" create deployments -n ecommerce; then
         echo "    verified: can write own sandbox, read all pods, cannot read secrets or change shared apps"
       else
@@ -227,11 +227,11 @@ cmd_list() {
   echo "Target: ${CONTEXT:-<none>}  ${SERVER}"
   echo ""
   echo "Identities (mode=readonly is a shared class identity; blank = personal user with a sandbox):"
-  kubectl -n lab-users get serviceaccounts -l sre-lab/user -L sre-lab/mode
+  kubectl -n lab-users get serviceaccounts -l lab/user -L lab/mode
   echo ""
-  kubectl get namespaces -l sre-lab/user -L sre-lab/user
+  kubectl get namespaces -l lab/user -L lab/user
   echo ""
-  kubectl get resourcequota --all-namespaces -l sre-lab/user
+  kubectl get resourcequota --all-namespaces -l lab/user
 }
 
 CMD="${1:-help}"

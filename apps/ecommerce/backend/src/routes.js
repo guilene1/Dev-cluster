@@ -69,7 +69,7 @@ router.delete("/cart/items/:id", async (req, res, next) => {
 });
 
 // Simulates a call to an external payment processor -- a natural place for
-// students to see a downstream span in APM and to inject chaos.
+// students to see a downstream dependency and to inject chaos.
 async function callPaymentProcessor(totalCents) {
   await new Promise((resolve) => setTimeout(resolve, 150 + Math.random() * 200));
   return { approved: true, authCode: `AUTH-${Math.floor(Math.random() * 1e8)}`, totalCents };

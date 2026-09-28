@@ -2,7 +2,7 @@
 
 ## Objective
 
-Use Datadog and Kubernetes evidence to distinguish memory pressure from an unsafe container resource limit.
+Use Kubernetes evidence to distinguish memory pressure from an unsafe container resource limit.
 
 ## Trigger the Incident
 
@@ -12,7 +12,7 @@ Run this from the repository root against your own lab environment:
 ./scripts/chaos/shrink-limits.sh support-tickets
 ```
 
-The script saves the current resources and applies a deliberately unsafe memory request and limit. Wait for restarts and Datadog signals before troubleshooting.
+The script saves the current resources and applies a deliberately unsafe memory request and limit. Wait for restarts to appear before troubleshooting.
 
 ## Situation
 
@@ -25,17 +25,24 @@ The support tickets service is unstable. Backend pods restart repeatedly while s
 
 ## What You Know
 
-- Datadog shows backend memory near its configured ceiling.
 - Container restart counts are increasing.
 - The problem began after a workload resource change.
 
-## Start With Datadog
+## Start With the Symptom
 
-1. Go to **Dashboards > SRE Lab Scenario Signals** and set the time range to **Past 30 Minutes**.
-2. In **Memory Usage and Limits**, filter `kube_namespace:support-tickets` and `kube_deployment:support-tickets-backend`. Compare `kubernetes.memory.usage` with `kubernetes.memory.limits` immediately before each restart.
-3. In **Container Restarts**, confirm `kubernetes.containers.restarts` increases for the same Deployment.
+1. Watch the backend pods. The newest one keeps restarting and ends up in `CrashLoopBackOff`:
 
-Record the memory value, configured limit, restart timestamp, pod name, and monitor transition. Confirm the exact `OOMKilled` reason later with `kubectl describe`.
+```bash
+kubectl get pods -n support-tickets -l app=support-tickets-backend -w
+```
+
+2. Check how much memory the healthy pods use:
+
+```bash
+kubectl top pods -n support-tickets
+```
+
+Record the restart timestamp, pod name, and the memory the healthy pods use. Confirm the exact `OOMKilled` reason with `kubectl describe` below.
 
 ## Troubleshooting
 
@@ -45,7 +52,7 @@ Record the memory value, configured limit, restart timestamp, pod name, and moni
 kubectl get pods -n support-tickets -l app=support-tickets-backend
 ```
 
-Expected output: the backend pod is Running again, but its `RESTARTS` count is greater than zero and continues increasing.
+Expected output: the older pods stay Running, while the newest pod's `RESTARTS` count is greater than zero and keeps increasing.
 
 2. Inspect the previous container termination.
 
@@ -55,15 +62,15 @@ kubectl describe pod <pod-name> -n support-tickets
 
 Expected output: under **Last State**, the reason is `OOMKilled` and the exit code is `137`.
 
-3. Compare live memory with the configured limit.
+3. Compare the memory a healthy pod uses with the configured limit.
 
 ```bash
-kubectl top pod <pod-name> -n support-tickets
+kubectl top pods -n support-tickets
 kubectl get deployment support-tickets-backend -n support-tickets \
   -o jsonpath='{.spec.template.spec.containers[0].resources}{"\n"}'
 ```
 
-Expected output: memory usage approaches the deliberately reduced `20Mi` memory limit. The container exceeds that limit and Kubernetes terminates it.
+Expected output: healthy backend pods use about `16Mi`, but the Deployment now sets a `12Mi` memory limit. The new container exceeds that limit while starting, and Kubernetes terminates it.
 
 4. Check the previous container logs for supporting evidence.
 
@@ -79,7 +86,7 @@ Look for `Reason: OOMKilled`. Compare observed memory consumption with `resource
 
 ## Root Cause
 
-Record the relationship between observed memory, the previous container state, and the configured limit. Confirm it with the instructor.
+Record the relationship between observed memory, the previous container state, and the configured limit before you apply the fix.
 
 ## Fix
 
@@ -94,7 +101,7 @@ Do not remove the limit or choose an arbitrary large value.
 
 ## Validation
 
-Confirm pods remain Ready, restart counts stop increasing, memory stays below the limit, requests succeed, and both Datadog monitors recover.
+Confirm pods remain Ready, restart counts stop increasing, memory stays below the limit, and requests succeed.
 
 ## DevOps Lesson
 
@@ -124,4 +131,4 @@ Use the matching example in [DevOps STAR Scenarios](../devops-star-scenarios.md#
 
 ## Brief STAR Example
 
-An internal backend repeatedly restarted after its memory limit was reduced to 20 MiB. My task was to distinguish an application failure from a Kubernetes resource problem. I correlated Datadog memory and restart signals with exit code 137 and `OOMKilled` in the pod state, then restored a measured memory limit. The restart loop stopped, pods remained Ready, and future resource values were based on observed usage.
+An internal backend repeatedly restarted after its memory limit was reduced to 12 MiB. My task was to distinguish an application failure from a Kubernetes resource problem. I correlated the restarts and the memory the healthy pods used with exit code 137 and `OOMKilled` in the pod state, then restored a measured memory limit. The restart loop stopped, pods remained Ready, and future resource values were based on observed usage.

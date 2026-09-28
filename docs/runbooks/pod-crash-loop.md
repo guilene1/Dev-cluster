@@ -3,8 +3,7 @@
 ## Symptoms
 
 - `kubectl get pods` shows a pod cycling through `CrashLoopBackOff`.
-- Datadog: the `[SRE Lab] Pod restarts detected` monitor fires for a
-  `kube_deployment`.
+- The `RESTARTS` column keeps climbing for one Deployment's pods.
 - Requests to the affected app may 502 intermittently as the Service
   briefly loses endpoints each time the pod dies and gets recreated.
 
@@ -20,9 +19,6 @@ kubectl -n <namespace> logs <pod>
 
 # Full event history for the pod: OOMKilled? failed liveness probe? image pull error?
 kubectl -n <namespace> describe pod <pod>
-
-# In Datadog: filter logs by service and look for the last line before the crash
-# service:<app>-backend
 ```
 
 ## Common root causes in this lab
@@ -56,8 +52,7 @@ kubectl -n <namespace> describe pod <pod>
   killing it repeatedly.
 - Set `readinessProbe.failureThreshold` high enough to tolerate a brief
   blip but low enough to catch a real outage (this lab uses 3 x 10s = 30s).
-- Alert on restart *count* over a window (see
-  `datadog/monitors/pod-restarts.json`), not on a single restart, to avoid
+- Alert on restart *count* over a window, not on a single restart, to avoid
   paging on a one-off scheduler eviction.
 
 ## Reproduce this in the lab

@@ -1,6 +1,6 @@
 # ConfigMap Rollout Runbook
 
-Use this runbook when new pods fail probes after a configuration rollout while older pods remain healthy. Start with Datadog unavailable-replica, restart, event, and workload log signals. Then compare the live ConfigMap, pod environment, Deployment probes, and rollout history.
+Use this runbook when new pods fail probes after a configuration rollout while older pods remain healthy. Start with unavailable replicas, restart counts, warning events, and pod logs. Then compare the live ConfigMap, pod environment, Deployment probes, and rollout history.
 
 ```bash
 kubectl rollout status deployment/<app>-backend -n <app>
@@ -19,4 +19,4 @@ For the lab port mismatch:
 kubectl rollout status deployment/<app>-backend -n <app>
 ```
 
-Confirm all pods are Ready, traffic succeeds, restarts stop, and Datadog monitors recover.
+Confirm all pods are Ready, traffic succeeds, and restarts stop.

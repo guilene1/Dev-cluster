@@ -1,5 +1,4 @@
 const express = require("express");
-const tracer = require("./tracer");
 
 // In-memory chaos state. Toggled via HTTP so scripts/chaos/*.sh can trigger
 // failure modes with a curl call against a running pod -- no redeploy needed.
@@ -33,8 +32,6 @@ function chaosMiddleware(req, res, next) {
     if (state.errorRate > 0 && Math.random() < state.errorRate) {
       const err = new Error(`chaos: injected failure on ${req.method} ${req.path}`);
       console.error("chaos error injection fired:", err.stack);
-      const span = tracer.scope().active();
-      if (span) span.setTag("error", err);
       return res.status(500).json({ error: "chaos: injected failure" });
     }
     next();

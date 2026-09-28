@@ -14,11 +14,6 @@ spec:
     metadata:
       labels:
         app: support-tickets-frontend
-        tags.datadoghq.com/env: "lab"
-        tags.datadoghq.com/service: "support-tickets-frontend"
-        tags.datadoghq.com/version: "1.0.0"
-      annotations:
-        ad.datadoghq.com/support-tickets-frontend.logs: '[{"source":"nginx","service":"support-tickets-frontend"}]'
     spec:
       containers:
         - name: support-tickets-frontend

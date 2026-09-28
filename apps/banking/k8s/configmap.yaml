@@ -5,6 +5,3 @@ metadata:
   namespace: banking
 data:
   PORT: "4000"
-  DD_ENV: "lab"
-  DD_SERVICE: "banking-backend"
-  DD_VERSION: "1.0.0"

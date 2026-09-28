@@ -1,15 +1,15 @@
-# Connecting to the SRE Lab Cluster
+# Connecting to a Shared Lab Cluster
 
-This guide shows you how to connect to the shared Kubernetes cluster your instructor launched, and what you can do once you are connected. You do **not** need an AWS account, Terraform, or Docker. You only need `kubectl` and one file from your instructor.
+This guide shows you how to connect to a lab cluster that a teammate launched and shared with you, and what you can do once you are connected. You do **not** need an AWS account, Terraform, or Docker. You only need `kubectl` and one file from the person who launched the cluster.
 
 ## What you will receive
 
-Your instructor gives you two things:
+The person who launched the cluster gives you two things:
 
-- **A kubeconfig file**, usually named `class.kubeconfig`. It holds the cluster address and a login token.
+- **A kubeconfig file**, for example `team.kubeconfig`. It holds the cluster address and a login token.
 - **The lab domain**, for example `example.com`. The five applications are at `https://<app>.<lab-domain>`.
 
-The file is a credential. Anyone who has it can read the cluster, so keep it inside the class and never post it publicly.
+The file is a credential. Anyone who has it can read the cluster, so keep it within your team and never post it publicly.
 
 ## What you can and cannot do
 
@@ -26,7 +26,7 @@ Your access is **read-only**. You can look at everything, and you cannot change 
 
 | You CANNOT | What you will see |
 |---|---|
-| Read any Secret (database passwords, monitoring keys) | `Forbidden` |
+| Read any Secret (database passwords) | `Forbidden` |
 | Create, edit, scale, restart, or delete anything | `Forbidden` |
 | Open a shell in a pod (`exec`) or port-forward | `Forbidden` |
 | Change nodes, namespaces, Ingresses, or permissions | `Forbidden` |
@@ -57,10 +57,10 @@ kubectl version --client
 
 ## Step 2. Save your kubeconfig file
 
-Save the file your instructor sent you as `sre-lab.kubeconfig` inside a `.kube` folder in your home directory. Create the folder if it does not exist.
+Save the file you received as `lab.kubeconfig` inside a `.kube` folder in your home directory. Create the folder if it does not exist.
 
-- Windows: `C:\Users\<you>\.kube\sre-lab.kubeconfig`
-- macOS and Linux: `~/.kube/sre-lab.kubeconfig`
+- Windows: `C:\Users\<you>\.kube\lab.kubeconfig`
+- macOS and Linux: `~/.kube/lab.kubeconfig`
 
 Do not save it inside a Git repository folder.
 
@@ -70,12 +70,12 @@ Run one of these in every new terminal window.
 
 ```bash
 # macOS, Linux, WSL, Git Bash
-export KUBECONFIG=~/.kube/sre-lab.kubeconfig
+export KUBECONFIG=~/.kube/lab.kubeconfig
 ```
 
 ```powershell
 # Windows PowerShell
-$env:KUBECONFIG = "$HOME\.kube\sre-lab.kubeconfig"
+$env:KUBECONFIG = "$HOME\.kube\lab.kubeconfig"
 ```
 
 ## Step 4. Check that it works
@@ -107,7 +107,7 @@ Each application has its own namespace with a frontend and a backend Deployment.
 | Student portal | `student-portal` | `student-portal-frontend`, `student-portal-backend` | `https://student-portal.<lab-domain>` |
 | Support tickets | `support-tickets` | `support-tickets-frontend`, `support-tickets-backend` | `https://support-tickets.<lab-domain>` |
 
-Other namespaces you can look at: `kube-system` (Kubernetes components and the load balancer controller), `datadog` (monitoring, when installed), and `default`.
+Other namespaces you can look at: `kube-system` (Kubernetes components and the load balancer controller), and `default`.
 
 ## Commands to explore
 
@@ -130,31 +130,31 @@ Other namespaces you can look at: `kube-system` (Kubernetes components and the l
 | Resource limits per namespace | `kubectl get resourcequota -A` |
 | An object as YAML | `kubectl get deployment -n banking banking-backend -o yaml` |
 
-## If your instructor runs an incident
+## If someone runs an incident
 
-Your instructor may break one of the applications on purpose so the class can diagnose it. You cannot fix it, but you can find the cause. Work in this order:
+The person who launched the cluster may break one of the applications on purpose so your team can diagnose it. You cannot fix it, but you can find the cause. Work in this order:
 
 - Find what is unhealthy: `kubectl get pods -A` (look for `CrashLoopBackOff`, `ImagePullBackOff`, `Pending`, `0/1` ready, or many restarts).
 - Read the events for that namespace: `kubectl get events -n <namespace> --sort-by=.lastTimestamp`.
 - Describe the failing pod and read the `Events` and `Last State` sections: `kubectl describe pod -n <namespace> <pod>`.
 - Read its logs, and the previous logs if it restarted: `kubectl logs -n <namespace> <pod> --previous`.
 - Check the Deployment, Service endpoints, and Ingress for something that does not match.
-- Tell your instructor the root cause and the fix you would apply.
+- Write down the root cause and the fix you would apply, then compare notes with the person who triggered it.
 
 ## Troubleshooting
 
 | What you see | What it means and what to do |
 |---|---|
 | `Forbidden` on create, edit, delete, or Secrets | Expected. You are read-only. |
-| `Unauthorized` | Wrong file, or your instructor revoked access. Ask for the current file. |
-| `Unable to connect to the server`, timeout, or `no such host` | The cluster is stopped or rebuilt, or your network blocks it. Check with your instructor and try another network. |
+| `Unauthorized` | Wrong file, or your access was revoked. Ask for the current file. |
+| `Unable to connect to the server`, timeout, or `no such host` | The cluster is stopped or rebuilt, or your network blocks it. Check with the person who launched it and try another network. |
 | An error that mentions `localhost:8080` | `KUBECONFIG` is not set in this terminal, so kubectl found no cluster. Repeat Step 3. |
 | `kubectl: command not found` | Install kubectl (Step 1) and open a new terminal. |
-| The file name shows `.txt` at the end | Windows added an extension. Rename it to `sre-lab.kubeconfig`. |
+| The file name shows `.txt` at the end | Windows added an extension. Rename it to `lab.kubeconfig`. |
 
 ## Rules for using the shared file
 
 - Treat the kubeconfig like a password. Do not post it in public chats, forums, screenshots, or Git repositories.
-- Do not share it with people outside the class.
-- The cluster is shared by the whole class. Close long-running commands such as `kubectl get pods -w` and `kubectl logs -f` when you are finished.
+- Do not share it with people outside your team.
+- The cluster is shared by your whole team. Close long-running commands such as `kubectl get pods -w` and `kubectl logs -f` when you are finished.
 - Do not try to bypass the read-only limits.

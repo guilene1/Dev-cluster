@@ -12,7 +12,7 @@ Run this from the repository root against your own lab environment:
 ./scripts/chaos/break-config.sh student-portal
 ```
 
-The script saves the current port, changes the ConfigMap, and restarts the student portal backend Deployment. Wait for Datadog and Kubernetes to observe the rollout failure before troubleshooting.
+The script saves the current port, changes the ConfigMap, and restarts the student portal backend Deployment. Give Kubernetes a minute to observe the rollout failure before troubleshooting.
 
 ## Situation
 
@@ -25,17 +25,25 @@ The student portal has reduced rollout capacity after a configuration release. E
 
 ## What You Know
 
-- Datadog shows unavailable replicas and increasing container restarts for `student-portal-backend`.
+- `student-portal-backend` has unavailable replicas and increasing container restarts.
 - Kubernetes health events began after a rollout.
 - The process in each new container appears to start.
 
-## Start With Datadog
+## Start With the Symptom
 
-1. Go to **Infrastructure > Kubernetes > Explorer**, select **Pods**, set **Past 30 Minutes**, and enter `kube_namespace:student-portal kube_deployment:student-portal-backend` in **Filter by**. Compare Ready status and restarts on the old and new pods.
-2. Go to **Events > Explorer** and search `kube_namespace:student-portal status:(warning OR error)`. Open the readiness-probe, liveness-probe, or BackOff event for the newest backend pod.
-3. Go to **Logs > Explorer**, set **Past 30 Minutes**, and search `service:student-portal-backend`. Open a startup log and record the port on which the process is listening.
+1. Compare Ready status and restarts on the old and new pods:
 
-Record the newest pod, first probe-event timestamp, restart change, and logged listening port.
+```bash
+kubectl get pods -n student-portal -l app=student-portal-backend -w
+```
+
+2. List recent warning events and find the readiness-probe, liveness-probe, or BackOff event for the newest backend pod:
+
+```bash
+kubectl get events -n student-portal --field-selector type=Warning --sort-by=.lastTimestamp
+```
+
+Record the newest pod, first probe-event timestamp, and restart change.
 
 ## Troubleshooting
 
@@ -80,7 +88,7 @@ Connect the probe failures to the application listening port and the port checke
 
 ## Root Cause
 
-Record the configuration and probe mismatch supported by your evidence. Confirm it with the instructor after the exercise.
+Record the configuration and probe mismatch supported by your evidence before you apply the fix.
 
 ## Fix
 
@@ -97,7 +105,7 @@ kubectl rollout status deployment/student-portal-backend -n student-portal
 kubectl get pods -n student-portal
 ```
 
-Confirm every pod is Ready, restarts stop increasing, the app works, and both Datadog monitors recover.
+Confirm every pod is Ready, restarts stop increasing, and the app works.
 
 ## DevOps Lesson
 
@@ -115,11 +123,11 @@ Explain why only new pods needed investigation.
 
 ### Action
 
-Describe the Datadog, event, log, ConfigMap, and probe comparison.
+Describe the event, log, ConfigMap, and probe comparison.
 
 ### Result
 
-State how readiness and monitor recovery were verified.
+State how readiness recovery was verified.
 
 ## Natural Spoken Version
 
@@ -127,4 +135,4 @@ Use the matching example in [DevOps STAR Scenarios](../devops-star-scenarios.md#
 
 ## Brief STAR Example
 
-One of our internal applications stopped bringing new pods to Ready after a configuration rollout. My task was to identify why only the new pods failed. Datadog events and logs showed probe failures and an application listening on port 4001, while Kubernetes probes still checked port 4000. I restored the correct ConfigMap value and restarted the Deployment. All replicas became Ready, and configuration-to-probe validation was added to deployment checks.
+One of our internal applications stopped bringing new pods to Ready after a configuration rollout. My task was to identify why only the new pods failed. Kubernetes events and pod logs showed probe failures and an application listening on port 4001, while Kubernetes probes still checked port 4000. I restored the correct ConfigMap value and restarted the Deployment. All replicas became Ready, and configuration-to-probe validation was added to deployment checks.

@@ -11,13 +11,12 @@ kind: Namespace
 metadata:
   name: lab-users
   labels:
-    app.kubernetes.io/part-of: sre-lab
+    app.kubernetes.io/part-of: k8s-lab
 ---
 # Read-only access to every namespace, using Kubernetes' built-in `view` role.
-# `view` deliberately EXCLUDES Secrets, which is what keeps the Datadog API/app
-# keys (datadog/datadog-secret), the RDS credentials (<app>/<app>-db-credentials)
-# and every participant's own token Secret (lab-users) unreadable. It includes
-# pod logs, events, Ingresses, HPAs, quotas, and -- once metrics-server is
+# `view` deliberately EXCLUDES Secrets, which is what keeps the RDS credentials
+# (<app>/<app>-db-credentials) and every participant's own token Secret
+# (lab-users) unreadable. It includes pod logs, events, Ingresses, HPAs, quotas, and -- once metrics-server is
 # installed -- `kubectl top`, via that project's aggregate-to-view role.
 #
 # Do not "fix" a missing permission here by swapping in `edit` or `admin`:
@@ -25,7 +24,7 @@ metadata:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: sre-lab-users-view
+  name: lab-users-view
 subjects:
   - apiGroup: rbac.authorization.k8s.io
     kind: Group
@@ -40,7 +39,7 @@ roleRef:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: sre-lab-cluster-reader
+  name: lab-cluster-reader
 rules:
   - apiGroups: [""]
     resources: [nodes, namespaces, persistentvolumes]
@@ -55,7 +54,7 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: sre-lab-users-cluster-reader
+  name: lab-users-cluster-reader
 subjects:
   - apiGroup: rbac.authorization.k8s.io
     kind: Group
@@ -63,7 +62,7 @@ subjects:
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: sre-lab-cluster-reader
+  name: lab-cluster-reader
 ---
 # Write access, granted ONLY inside a participant's own sandbox namespace via a
 # RoleBinding (a RoleBinding to a ClusterRole is namespace-scoped). Combined
@@ -85,7 +84,7 @@ roleRef:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: sre-lab-sandbox-user
+  name: lab-sandbox-user
 rules:
   - apiGroups: [""]
     resources:

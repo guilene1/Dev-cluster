@@ -2,7 +2,7 @@
 
 ## Objective
 
-Trace HTTP 404 responses across Datadog, Route 53, ALB, Ingress, Service, endpoints, and pods.
+Trace HTTP 404 responses across Route 53, ALB, Ingress, Service, endpoints, and pods.
 
 ## Trigger the Incident
 
@@ -14,7 +14,7 @@ Run this from the repository root against your own lab environment:
 
 The script saves the current Ingress backend and changes the live route. Allow one or two minutes for the AWS Load Balancer Controller to reconcile before testing the public URL.
 
-Generate enough requests for APM to display the failure:
+Confirm the failure from outside the cluster:
 
 ```bash
 for i in {1..10}; do
@@ -23,7 +23,7 @@ for i in {1..10}; do
 done
 ```
 
-Expected output: repeated HTTP `404` responses. Allow two to five minutes for the traces to appear in Datadog.
+Expected output: repeated HTTP `404` responses.
 
 ## Situation
 
@@ -38,15 +38,24 @@ Users receive HTTP 404 from the food delivery home page even though the Kubernet
 
 - `food-delivery.<lab-domain>` resolves and the ALB accepts connections.
 - Pods are Running and Ready.
-- Datadog Trace Explorer shows requests to `service:food-delivery-backend` with `http.status_code:404` and resource `GET /`.
 
-## Start With Datadog
+## Start With the Symptom
 
-1. Go to **APM > Trace Explorer** and set the time range to **Past 30 Minutes**. If the page opens in Live Search, switch to the historical trace view so the generated requests remain visible.
-2. In the search bar, enter `service:food-delivery-backend env:lab @http.status_code:404`, then run the search. If no result appears yet, remove `@http.status_code:404`, confirm that backend traces exist, wait two to five minutes, and add the status filter again.
-3. Open the newest matching trace. Confirm that the service is `food-delivery-backend`, the resource is `GET /`, and the HTTP status is `404`. This proves that public root traffic reached the backend instead of the frontend.
+1. Look at the body of the 404, not just the status code:
 
-The custom dashboard widget and monitor are optional summaries; students do not need them to find this issue. This repository does not install the Datadog AWS integration, so ALB listeners, rules, and target health are not available in Datadog. Record the 404 trace timestamp and backend pod, then continue with AWS CLI and Kubernetes.
+```bash
+curl -s "https://food-delivery.$(cat .lab-domain)/"
+```
+
+Expected output: `Cannot GET /`. That is the Express backend's default 404 page, not the nginx frontend, which means public root traffic is reaching the backend instead of the frontend.
+
+2. Compare it with an API path, which the backend is supposed to answer:
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' "https://food-delivery.$(cat .lab-domain)/api/restaurants"
+```
+
+Expected output: `200`. The ALB and backend work; only the route for `/` is wrong. Record the timestamp, then continue with Kubernetes and the AWS CLI.
 
 ## Troubleshooting
 
@@ -90,7 +99,7 @@ Follow DNS to ALB, listener, target group, Ingress, Service, endpoints, pod, and
 
 ## Root Cause
 
-Record which routing hop sends traffic to the wrong destination. Confirm it with the instructor after the exercise.
+Record which routing hop sends traffic to the wrong destination before you apply the fix.
 
 ## Fix
 
@@ -103,7 +112,7 @@ The source-of-truth manifest is `ingress/food-delivery-ingress.yaml`, whose back
 
 ## Validation
 
-Test `https://food-delivery.<lab-domain>/`, confirm the controller reconciles the Ingress, and verify the backend `GET /` trace rate returns to zero in Datadog.
+Test `https://food-delivery.<lab-domain>/`, confirm the controller reconciles the Ingress, and verify that `/` returns `200` with the frontend page instead of `Cannot GET /`.
 
 ## DevOps Lesson
 
@@ -121,11 +130,11 @@ Explain the need to locate the failing routing hop.
 
 ### Action
 
-Describe the Datadog, AWS, and Kubernetes traffic-path checks.
+Describe the external, AWS, and Kubernetes traffic-path checks.
 
 ### Result
 
-State how external access and trace recovery were verified.
+State how external access was verified.
 
 ## Natural Spoken Version
 
@@ -133,4 +142,4 @@ Use the matching example in [DevOps STAR Scenarios](../devops-star-scenarios.md#
 
 ## Brief STAR Example
 
-Users received HTTP 404 responses from one of our applications even though every pod was healthy. My task was to locate the failing hop in the public request path. Datadog showed `GET /` reaching the backend, and the Ingress revealed that `/` targeted port 4000 instead of the frontend on port 80. I corrected the route, waited for ALB reconciliation, and confirmed successful external requests and normal traces.
+Users received HTTP 404 responses from one of our applications even though every pod was healthy. My task was to locate the failing hop in the public request path. The 404 body came from the Express backend rather than nginx, and the Ingress revealed that `/` targeted port 4000 instead of the frontend on port 80. I corrected the route, waited for ALB reconciliation, and confirmed successful external requests.

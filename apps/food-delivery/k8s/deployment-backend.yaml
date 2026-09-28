@@ -14,11 +14,6 @@ spec:
     metadata:
       labels:
         app: food-delivery-backend
-        tags.datadoghq.com/env: "lab"
-        tags.datadoghq.com/service: "food-delivery-backend"
-        tags.datadoghq.com/version: "1.0.0"
-      annotations:
-        ad.datadoghq.com/food-delivery-backend.logs: '[{"source":"nodejs","service":"food-delivery-backend"}]'
     spec:
       containers:
         - name: food-delivery-backend
@@ -30,11 +25,6 @@ spec:
                 name: food-delivery-backend-config
             - secretRef:
                 name: food-delivery-db-credentials
-          env:
-            - name: DD_AGENT_HOST
-              valueFrom:
-                fieldRef:
-                  fieldPath: status.hostIP
           resources:
             requests:
               cpu: 100m

@@ -15,11 +15,10 @@ scenarios 04, 07 and 10.
   rather than causing an outage. Old pods keep serving on the old config
   until something -- a node recycle, a scale-up, an eviction -- takes them
   away.
-- Datadog: the `[SRE Lab] Pod restarts detected` monitor may fire (crash
-  loop / OOMKill cases) or **may not fire at all** (an `ImagePullBackOff`
-  or a failing readiness probe never restarts anything). Error rate and
-  p95 often stay completely flat. See
-  [devops-vs-sre.md](../devops-vs-sre.md#the-detection-gap).
+- Restart counts may climb (crash loop / OOMKill cases) or **may not move
+  at all** (an `ImagePullBackOff` or a failing readiness probe never
+  restarts anything). Error rate and response times often stay completely
+  flat, so watching restarts alone misses these.
 
 ## Diagnostic commands
 
@@ -46,13 +45,6 @@ kubectl -n <namespace> logs <newest-pod> --previous  # if it already restarted
 
 # Namespace-wide event history, newest last
 kubectl -n <namespace> get events --sort-by=.lastTimestamp | tail -20
-```
-
-In Datadog, the same events are searchable without a terminal:
-
-```
-source:kubernetes kube_namespace:<namespace>
-service:<app>-backend status:error
 ```
 
 ## Reading the `describe pod` Events block
@@ -120,9 +112,8 @@ blocks quietly rather than failing loudly.
   ```
   Without this, a pipeline reports a green deploy for a rollout that can
   never finish.
-- Alert on unavailable replicas, which catches all four root causes above
-  with one monitor (see
-  [devops-vs-sre.md](../devops-vs-sre.md#the-detection-gap)).
+- Alert on unavailable or out-of-date replicas, which catches all four root
+  causes above with one check.
 - Keep config in version control and apply it from there, so
   `rollout history` and `git log` tell the same story. A `kubectl patch`
   run by hand is invisible to both.

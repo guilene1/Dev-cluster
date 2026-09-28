@@ -159,9 +159,9 @@ foreach ($scenario in $Scenarios) {
     [void]$combined.Append('<section class="scenario">' + $body + '</section>')
 }
 
-$combinedHtml = Join-Path $BuildDir 'sre-lab-devops-scenarios.html'
-[System.IO.File]::WriteAllText($combinedHtml, (New-Html 'SRE Lab DevOps Scenarios' $combined.ToString()), [System.Text.UTF8Encoding]::new($false))
-Print-Pdf $combinedHtml (Join-Path $OutputDir 'sre-lab-devops-scenarios.pdf')
+$combinedHtml = Join-Path $BuildDir 'lab-scenarios.html'
+[System.IO.File]::WriteAllText($combinedHtml, (New-Html 'K8s Assistant Lab Scenarios' $combined.ToString()), [System.Text.UTF8Encoding]::new($false))
+Print-Pdf $combinedHtml (Join-Path $OutputDir 'lab-scenarios.pdf')
 
 $starSourcePath = Join-Path $RepoRoot 'docs\devops-star-scenarios.md'
 if (-not (Test-Path -LiteralPath $starSourcePath)) { throw "Missing Markdown source: $starSourcePath" }
@@ -175,9 +175,9 @@ $guideSourcePath = Join-Path $RepoRoot 'README.md'
 if (-not (Test-Path -LiteralPath $guideSourcePath)) { throw "Missing Markdown source: $guideSourcePath" }
 $guideMarkdown = Get-Content -Raw -LiteralPath $guideSourcePath
 $guideBody = Convert-Markdown $guideMarkdown
-$guideHtml = Join-Path $BuildDir 'sre-lab-launch-guide.html'
-[System.IO.File]::WriteAllText($guideHtml, (New-Html 'SRE Lab Launch Guide' $guideBody), [System.Text.UTF8Encoding]::new($false))
-Print-Pdf $guideHtml (Join-Path $OutputDir 'sre-lab-launch-guide.pdf')
+$guideHtml = Join-Path $BuildDir 'lab-launch-guide.html'
+[System.IO.File]::WriteAllText($guideHtml, (New-Html 'K8s Assistant Lab Launch Guide' $guideBody), [System.Text.UTF8Encoding]::new($false))
+Print-Pdf $guideHtml (Join-Path $OutputDir 'lab-launch-guide.pdf')
 
 # Shared-cluster handout. `<!-- pagebreak -->` on its own line in the source
 # starts a new page.
@@ -186,7 +186,7 @@ if (-not (Test-Path -LiteralPath $connectSourcePath)) { throw "Missing Markdown 
 $connectParts = (Get-Content -Raw -LiteralPath $connectSourcePath) -split '(?m)^<!-- pagebreak -->\s*$'
 $connectBody = ($connectParts | ForEach-Object { '<section class="scenario">' + (Convert-Markdown $_) + '</section>' }) -join ''
 $connectHtml = Join-Path $BuildDir 'connect-to-the-cluster.html'
-[System.IO.File]::WriteAllText($connectHtml, (New-Html 'Connecting to the SRE Lab Cluster' $connectBody), [System.Text.UTF8Encoding]::new($false))
+[System.IO.File]::WriteAllText($connectHtml, (New-Html 'Connecting to the Lab Cluster' $connectBody), [System.Text.UTF8Encoding]::new($false))
 Print-Pdf $connectHtml (Join-Path $OutputDir 'connect-to-the-cluster.pdf')
 
 if (-not $KeepBuild) {
