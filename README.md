@@ -78,6 +78,8 @@ Expect it to take 20 minutes or more. It is safe to re-run: if a rollout fails, 
 
 ## 4. Verify the deployment
 
+The commands below use the default cluster name and region. Replace them if you changed either in `terraform.tfvars`.
+
 ```bash
 aws eks update-kubeconfig --name dev-cluster --region us-east-1
 kubectl get nodes
@@ -156,7 +158,8 @@ Afterward, check the AWS console for any remaining ALBs, target groups, NAT Gate
 Files that `setup.sh` generates locally, all gitignored: `.lab-domain` (your lab domain), `terraform/*.tfstate` (includes the RDS master password), and `kubeconfigs/` (access files from `users.sh`).
 
 ## Architecture
-<img width="1536" height="1024" alt="image" src="https://github.com/user-attachments/assets/fc430278-40fc-4eed-87d3-1524a559b7f9" />
+
+<img width="100%" alt="Lab architecture: Route 53 and a shared ALB in front of five apps on EKS, backed by RDS PostgreSQL and ECR" src="https://github.com/user-attachments/assets/fc430278-40fc-4eed-87d3-1524a559b7f9" />
 
 Five applications share the EKS cluster: `ecommerce`, `banking`, `food-delivery`, `student-portal`, and `support-tickets`. Each has a React/nginx frontend and a Node.js/Express backend in its own namespace. See [Architecture](docs/architecture.md) for the full design.
 
